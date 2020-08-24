@@ -7,7 +7,8 @@ from gaze_tracking import GazeTracking
 from werkzeug.utils import secure_filename
 
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
-UPLOAD_FOLDER = "source_img"
+DIRNAME = os.path.dirname(__file__)
+UPLOAD_FOLDER = os.path.join(DIRNAME,"source_img")
 
 # Flask instantiation
 app = Flask(__name__)
@@ -24,8 +25,8 @@ def imagecov(photoname, relative_eye_size=1.5):
     put in the name of image in photoname
     '''
     photoname = photoname
-    sourcename = 'source_img/' + photoname
-    finalname = 'static/' + str(count)+".jpg"
+    sourcename = DIRNAME + '/source_img/' + photoname
+    finalname =  DIRNAME + '/static/' + str(count)+".jpg"
     '''
     You can change the relative eye size to optimize the image further
     '''
@@ -41,12 +42,14 @@ def imagecov(photoname, relative_eye_size=1.5):
 
     left_pupil = gaze.pupil_left_coords()
     right_pupil = gaze.pupil_right_coords()
-
-    distance = (left_pupil[0] - right_pupil[0]) * (left_pupil[0] - right_pupil[0]) + (left_pupil[1] - right_pupil[1]) * (left_pupil[1] - right_pupil[1])
+    try:
+        distance = (left_pupil[0] - right_pupil[0]) * (left_pupil[0] - right_pupil[0]) + (left_pupil[1] - right_pupil[1]) * (left_pupil[1] - right_pupil[1])
+    except:
+        return False
     distance = np.sqrt(distance)
     print(distance)
     face_image = Image.open(sourcename)
-    eye_image = Image.open('source_img/redeye.png')
+    eye_image = Image.open(DIRNAME + '/source_img/redeye.png')
 
     eye_image = eye_image.resize((int(distance*2*relative_eye_size),int(distance*relative_eye_size)))
     eye_image = eye_image.rotate(15)
@@ -55,13 +58,16 @@ def imagecov(photoname, relative_eye_size=1.5):
     Image.Image.paste(face_image, eye_image,(right_pupil[0] - int(distance*relative_eye_size),right_pupil[1]-int(distance*relative_eye_size/2)), eye_image) 
     count+=1
     # face_image.show()
-    return face_image.save(finalname)
+    face_image.save(finalname)
     # eye_image.show()
+    return True
 
 links = {}
 
 # Driver code
-
+@app.route("/failed")
+def failure():
+    return 'Program failed to find any eyes :('
 @app.route("/", methods=['GET','POST'])
 def index(): 
     global count
@@ -69,10 +75,14 @@ def index():
         file = request.files['file']
         if file: 
             filename=secure_filename(file.filename)
+            # print("hello "+os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            imagecov(filename)
-            return redirect("static/"+str(count-1)+".jpg")
-        
+            print("hello "+ filename)
+            if(imagecov(filename)):
+                return redirect("static/"+str(count-1)+".jpg")
+            else: 
+                return redirect(url_for('failure'))
     return render_template('index.html')
 
 if __name__ == "__main__": 
